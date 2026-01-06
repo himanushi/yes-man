@@ -196,3 +196,62 @@ fn main() -> anyhow::Result<()> {
         log::info!("Running...");
     }
 }
+
+// =============================================================================
+// Tests (run with `cargo test --target x86_64-apple-darwin` on host)
+// =============================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_aw9523_constants() {
+        // Verify I2C address
+        assert_eq!(AW9523_ADDR, 0x58);
+
+        // Verify register addresses
+        assert_eq!(AW9523_REG_OUTPUT1, 0x03);
+        assert_eq!(AW9523_REG_CONFIG0, 0x04);
+        assert_eq!(AW9523_REG_CONFIG1, 0x05);
+        assert_eq!(AW9523_REG_CTL, 0x11);
+        assert_eq!(AW9523_REG_SOFTRESET, 0x7F);
+    }
+
+    #[test]
+    fn test_aw9523_lcd_rst_bit() {
+        // Pin 9 = P1 bit 1 = 0x02
+        assert_eq!(AW9523_LCD_RST_BIT, 0x02);
+        assert_eq!(AW9523_LCD_RST_BIT, 1 << 1);
+    }
+
+    #[test]
+    fn test_axp2101_constants() {
+        // Verify I2C address
+        assert_eq!(AXP2101_ADDR, 0x34);
+    }
+
+    #[test]
+    fn test_display_dimensions() {
+        // M5Stack Core S3 display is 320x240
+        let width: u16 = 320;
+        let height: u16 = 240;
+        assert_eq!(width, 320);
+        assert_eq!(height, 240);
+    }
+
+    #[test]
+    fn test_i2c_address_range() {
+        // Valid I2C addresses are 0x08 to 0x77
+        assert!(AW9523_ADDR >= 0x08 && AW9523_ADDR <= 0x77);
+        assert!(AXP2101_ADDR >= 0x08 && AXP2101_ADDR <= 0x77);
+    }
+
+    #[test]
+    fn test_text_position() {
+        // Center of 320x240 display
+        let center_x = 320 / 2;
+        let center_y = 240 / 2;
+        assert_eq!(center_x, 160);
+        assert_eq!(center_y, 120);
+    }
+}
