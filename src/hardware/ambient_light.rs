@@ -1,5 +1,6 @@
 //! LTR-553ALS-WA Ambient Light Sensor driver
 
+use esp_idf_hal::delay::FreeRtos;
 use esp_idf_hal::i2c::I2cDriver;
 use crate::config::i2c::ltr553;
 use crate::error::YesManError;
@@ -12,25 +13,32 @@ impl Ltr553 {
     pub fn init(i2c: &mut I2cDriver) -> Result<(), YesManError> {
         log::info!("Initializing LTR-553 at 0x{:02X}...", ltr553::ADDR);
 
-        // Verify manufacturer ID
-        let manufac_id = Self::read_register(i2c, ltr553::reg::MANUFAC_ID)?;
-        if manufac_id != ltr553::EXPECTED_MANUFAC_ID {
-            log::warn!(
-                "LTR-553 unexpected manufacturer ID: 0x{:02X} (expected: 0x{:02X})",
-                manufac_id,
-                ltr553::EXPECTED_MANUFAC_ID
-            );
-        }
+        // First, try to write to put sensor in standby mode
+        // This can help wake up the sensor
+        log::info!("  Setting standby mode...");
+        Self::write_register(i2c, ltr553::reg::ALS_CONTR, ltr553::als_ctrl::STANDBY)?;
+        FreeRtos::delay_ms(10);
 
-        // Enable ALS with 1x gain (wide range: 1 ~ 64k lux)
+        // Verify manufacturer ID
+        log::info!("  Reading manufacturer ID...");
+        let manufac_id = Self::read_register(i2c, ltr553::reg::MANUFAC_ID)?;
+        log::info!("  Manufacturer ID: 0x{:02X} (expected: 0x{:02X})", manufac_id, ltr553::EXPECTED_MANUFAC_ID);
+
+        // Read part ID for additional verification
+        let part_id = Self::read_register(i2c, ltr553::reg::PART_ID)?;
+        log::info!("  Part ID: 0x{:02X}", part_id);
+
+        // Enable ALS in Active mode with 1x gain (wide range: 1 ~ 64k lux)
+        log::info!("  Enabling ALS active mode...");
         Self::write_register(i2c, ltr553::reg::ALS_CONTR, ltr553::als_ctrl::GAIN_1X | ltr553::als_ctrl::ACTIVE)?;
 
         // Set measurement rate: 100ms integration, 500ms repeat rate
-        // Bits [2:0] = integration time, Bits [5:3] = measurement rate
-        // 0x03 = 100ms integration, 500ms measurement rate
         Self::write_register(i2c, ltr553::reg::ALS_MEAS_RATE, 0x03)?;
 
-        log::info!("LTR-553 initialized (manufacturer ID: 0x{:02X})", manufac_id);
+        // Wait for first measurement
+        FreeRtos::delay_ms(100);
+
+        log::info!("LTR-553 initialized successfully");
         Ok(())
     }
 
