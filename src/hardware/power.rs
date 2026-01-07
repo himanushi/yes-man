@@ -40,7 +40,7 @@ impl Axp2101 {
     pub fn set_brightness(i2c: &mut I2cDriver, level: u8) -> Result<(), YesManError> {
         let voltage = Self::brightness_to_voltage(level);
         Self::write_register(i2c, axp2101::reg::DLDO1_VOLTAGE, voltage)?;
-        log::debug!("Backlight brightness set to {}% (0x{:02X})", level, voltage);
+        log::info!("Backlight: {}% -> voltage reg 0x{:02X}", level, voltage);
         Ok(())
     }
 
