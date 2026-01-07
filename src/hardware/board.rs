@@ -93,8 +93,12 @@ impl Board {
         Aw9523::reset_lcd(&mut i2c)?;
         FreeRtos::delay_ms(100);
 
-        // Step 4: Initialize ambient light sensor
-        log::info!("Step 4: Initializing ambient light sensor...");
+        // Step 4: Scan I2C bus to find devices
+        log::info!("Step 4: Scanning I2C bus...");
+        scan_i2c(&mut i2c);
+
+        // Step 4b: Initialize ambient light sensor
+        log::info!("Step 4b: Initializing ambient light sensor...");
         match Ltr553::init(&mut i2c) {
             Ok(_) => log::info!("Ambient light sensor initialized"),
             Err(e) => log::warn!("Ambient light sensor init failed (non-fatal): {}", e),
@@ -124,7 +128,7 @@ impl Board {
         log::info!("Initializing ILI9342C display...");
         let mut delay = FreeRtos;
         let mut display = Builder::new(ILI9342CRgb565, di)
-            .orientation(Orientation::new().rotate(Rotation::Deg180))
+            .orientation(Orientation::new().rotate(Rotation::Deg0))
             .color_order(ColorOrder::Bgr)
             .display_size(display_config::WIDTH, display_config::HEIGHT)
             .init(&mut delay)
