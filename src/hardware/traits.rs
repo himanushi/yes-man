@@ -43,6 +43,15 @@ pub trait DisplayDriver {
     fn height(&self) -> u16;
 }
 
+/// Ambient light sensor trait
+pub trait AmbientLightSensor {
+    /// Read ambient light level in lux
+    fn read_lux(&mut self) -> Result<u32, YesManError>;
+
+    /// Convert lux to recommended brightness (0-100)
+    fn lux_to_brightness(&self, lux: u32) -> u8;
+}
+
 #[cfg(test)]
 pub mod mocks {
     //! Mock implementations for testing
@@ -126,6 +135,28 @@ pub mod mocks {
         }
     }
 
+    /// Mock ambient light sensor for testing
+    pub struct MockAmbientLight {
+        pub lux_value: u32,
+    }
+
+    impl Default for MockAmbientLight {
+        fn default() -> Self {
+            Self { lux_value: 100 }
+        }
+    }
+
+    impl AmbientLightSensor for MockAmbientLight {
+        fn read_lux(&mut self) -> Result<u32, YesManError> {
+            Ok(self.lux_value)
+        }
+
+        fn lux_to_brightness(&self, lux: u32) -> u8 {
+            // Simple linear mapping for testing
+            ((lux.min(1000) * 100) / 1000) as u8
+        }
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -159,6 +190,16 @@ pub mod mocks {
 
             io.set_pin_low(5).unwrap();
             assert!(!io.pin_states[5]);
+        }
+
+        #[test]
+        fn test_mock_ambient_light() {
+            let mut als = MockAmbientLight::default();
+            assert_eq!(als.read_lux().unwrap(), 100);
+
+            als.lux_value = 500;
+            assert_eq!(als.read_lux().unwrap(), 500);
+            assert_eq!(als.lux_to_brightness(500), 50);
         }
     }
 }
