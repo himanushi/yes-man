@@ -84,6 +84,59 @@ pub mod aw88298 {
     pub const ADDR: u8 = 0x36;
 }
 
+/// LTR-553ALS-WA Ambient Light / Proximity Sensor
+pub mod ltr553 {
+    /// I2C address
+    pub const ADDR: u8 = 0x23;
+
+    /// Registers
+    pub mod reg {
+        /// ALS control (gain, mode)
+        pub const ALS_CONTR: u8 = 0x80;
+        /// Proximity sensor control
+        pub const PS_CONTR: u8 = 0x81;
+        /// ALS measurement rate
+        pub const ALS_MEAS_RATE: u8 = 0x85;
+        /// Manufacturer ID (should be 0x05)
+        pub const MANUFAC_ID: u8 = 0x86;
+        /// Part ID
+        pub const PART_ID: u8 = 0x87;
+        /// ALS data channel 1 low byte
+        pub const ALS_DATA_CH1_0: u8 = 0x88;
+        /// ALS data channel 1 high byte
+        pub const ALS_DATA_CH1_1: u8 = 0x89;
+        /// ALS data channel 0 low byte
+        pub const ALS_DATA_CH0_0: u8 = 0x8A;
+        /// ALS data channel 0 high byte
+        pub const ALS_DATA_CH0_1: u8 = 0x8B;
+        /// ALS/PS status
+        pub const ALS_PS_STATUS: u8 = 0x8C;
+    }
+
+    /// ALS control values
+    pub mod als_ctrl {
+        /// ALS active mode
+        pub const ACTIVE: u8 = 0x01;
+        /// ALS standby mode
+        pub const STANDBY: u8 = 0x00;
+        /// Gain 1x (1 ~ 64k lux)
+        pub const GAIN_1X: u8 = 0x00;
+        /// Gain 2x
+        pub const GAIN_2X: u8 = 0x04;
+        /// Gain 4x
+        pub const GAIN_4X: u8 = 0x08;
+        /// Gain 8x
+        pub const GAIN_8X: u8 = 0x0C;
+        /// Gain 48x
+        pub const GAIN_48X: u8 = 0x18;
+        /// Gain 96x (0.01 ~ 600 lux)
+        pub const GAIN_96X: u8 = 0x1C;
+    }
+
+    /// Expected manufacturer ID
+    pub const EXPECTED_MANUFAC_ID: u8 = 0x05;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,9 +165,15 @@ mod tests {
             ft6336::ADDR,
             es7210::ADDR,
             aw88298::ADDR,
+            ltr553::ADDR,
         ];
         for addr in addresses {
             assert!(addr >= 0x08 && addr <= 0x77, "Invalid I2C address: 0x{:02X}", addr);
         }
+    }
+
+    #[test]
+    fn test_ltr553_address() {
+        assert_eq!(ltr553::ADDR, 0x23);
     }
 }
