@@ -24,6 +24,15 @@ pub mod axp2101 {
         pub const V3_3: u8 = 0x1C; // 3.3V
         pub const V2_8: u8 = 0x17; // 2.8V
     }
+
+    /// LDO ON/OFF control register
+    pub const LDO_ONOFF: u8 = 0x90;
+
+    /// ALDO3 voltage register (for camera/LTR553)
+    pub const ALDO3_VOLTAGE: u8 = 0x94;
+
+    /// ALDO3 enable bit in LDO_ONOFF register
+    pub const ALDO3_ENABLE_BIT: u8 = 0x04; // bit 2
 }
 
 /// AW9523B I/O Expander
