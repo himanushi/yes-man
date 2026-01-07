@@ -1,51 +1,50 @@
-//! LTR-553ALS-WA Ambient Light Sensor driver
+//! LTR-553ALS-WA 環境光センサー ドライバ
 
 use esp_idf_hal::delay::FreeRtos;
 use esp_idf_hal::i2c::I2cDriver;
 use crate::config::i2c::ltr553;
 use crate::error::YesManError;
 
-/// LTR-553ALS-WA Ambient Light Sensor operations
+/// LTR-553ALS-WA 環境光センサー操作
 pub struct Ltr553;
 
 impl Ltr553 {
-    /// Initialize the ambient light sensor
+    /// 環境光センサーを初期化
     pub fn init(i2c: &mut I2cDriver) -> Result<(), YesManError> {
-        log::info!("Initializing LTR-553 at 0x{:02X}...", ltr553::ADDR);
+        log::info!("LTR-553 を 0x{:02X} で初期化中...", ltr553::ADDR);
 
-        // First, try to write to put sensor in standby mode
-        // This can help wake up the sensor
-        log::info!("  Setting standby mode...");
+        // まずスタンバイモードに設定してセンサーを起動
+        log::info!("  スタンバイモードに設定中...");
         Self::write_register(i2c, ltr553::reg::ALS_CONTR, ltr553::als_ctrl::STANDBY)?;
         FreeRtos::delay_ms(10);
 
-        // Verify manufacturer ID
-        log::info!("  Reading manufacturer ID...");
+        // 製造者 ID を確認
+        log::info!("  製造者 ID を読み取り中...");
         let manufac_id = Self::read_register(i2c, ltr553::reg::MANUFAC_ID)?;
-        log::info!("  Manufacturer ID: 0x{:02X} (expected: 0x{:02X})", manufac_id, ltr553::EXPECTED_MANUFAC_ID);
+        log::info!("  製造者 ID: 0x{:02X} (期待値: 0x{:02X})", manufac_id, ltr553::EXPECTED_MANUFAC_ID);
 
-        // Read part ID for additional verification
+        // パーツ ID も追加確認
         let part_id = Self::read_register(i2c, ltr553::reg::PART_ID)?;
-        log::info!("  Part ID: 0x{:02X}", part_id);
+        log::info!("  パーツ ID: 0x{:02X}", part_id);
 
-        // Enable ALS in Active mode with 1x gain (wide range: 1 ~ 64k lux)
-        log::info!("  Enabling ALS active mode...");
+        // ALS をアクティブモードで 1x ゲインで有効化 (広範囲: 1 ~ 64k lux)
+        log::info!("  ALS アクティブモードを有効化中...");
         Self::write_register(i2c, ltr553::reg::ALS_CONTR, ltr553::als_ctrl::GAIN_1X | ltr553::als_ctrl::ACTIVE)?;
 
-        // Set measurement rate: 100ms integration, 500ms repeat rate
+        // 測定レート設定: 100ms 積分時間、500ms 繰り返しレート
         Self::write_register(i2c, ltr553::reg::ALS_MEAS_RATE, 0x03)?;
 
-        // Wait for first measurement
+        // 最初の測定を待つ
         FreeRtos::delay_ms(100);
 
-        log::info!("LTR-553 initialized successfully");
+        log::info!("LTR-553 初期化成功");
         Ok(())
     }
 
-    /// Read ambient light level (raw ADC value)
-    /// Returns CH0 (visible + IR) and CH1 (IR only) values
+    /// 環境光レベルを読み取り (生の ADC 値)
+    /// CH0 (可視光 + IR) と CH1 (IR のみ) の値を返す
     pub fn read_als_raw(i2c: &mut I2cDriver) -> Result<(u16, u16), YesManError> {
-        // Read all 4 bytes at once (CH1_0, CH1_1, CH0_0, CH0_1)
+        // 4 バイトを一度に読み取り (CH1_0, CH1_1, CH0_0, CH0_1)
         let mut buf = [0u8; 4];
         i2c.write_read(ltr553::ADDR, &[ltr553::reg::ALS_DATA_CH1_0], &mut buf, 100)
             .map_err(|e| YesManError::I2c(format!("LTR-553 read error: {:?}", e)))?;
@@ -56,14 +55,14 @@ impl Ltr553 {
         Ok((ch0, ch1))
     }
 
-    /// Read ambient light and calculate approximate lux value
-    /// Uses simplified calculation suitable for backlight control
+    /// 環境光を読み取り、おおよその lux 値を計算
+    /// バックライト制御に適した簡易計算を使用
     pub fn read_lux(i2c: &mut I2cDriver) -> Result<u32, YesManError> {
         let (ch0, ch1) = Self::read_als_raw(i2c)?;
 
-        // Simplified lux calculation
-        // For accurate lux, need to account for gain, integration time, and ratio
-        // This approximation is sufficient for backlight control
+        // 簡易 lux 計算
+        // 正確な lux にはゲイン、積分時間、比率を考慮する必要がある
+        // この近似値はバックライト制御には十分
         let lux = if ch0 == 0 {
             0
         } else {
@@ -83,16 +82,16 @@ impl Ltr553 {
         Ok(lux)
     }
 
-    /// Convert lux to backlight brightness percentage (0-100)
-    /// Uses logarithmic mapping for natural perception
+    /// lux をバックライト明るさ (0-100%) に変換
+    /// 自然な知覚のために対数マッピングを使用
     pub fn lux_to_brightness(lux: u32) -> u8 {
-        // Human eye perceives light logarithmically
-        // Map lux ranges to brightness levels:
-        // 0-10 lux: 10-30% (dark room)
-        // 10-100 lux: 30-50% (dim indoor)
-        // 100-1000 lux: 50-70% (indoor)
-        // 1000-10000 lux: 70-90% (bright indoor / shade)
-        // 10000+ lux: 90-100% (direct sunlight)
+        // 人間の目は光を対数的に知覚する
+        // lux 範囲を明るさレベルにマッピング:
+        // 0-10 lux: 10-30% (暗い部屋)
+        // 10-100 lux: 30-50% (薄暗い室内)
+        // 100-1000 lux: 50-70% (室内)
+        // 1000-10000 lux: 70-90% (明るい室内 / 日陰)
+        // 10000+ lux: 90-100% (直射日光)
 
         const MIN_BRIGHTNESS: u8 = 10;
         const MAX_BRIGHTNESS: u8 = 100;
@@ -101,11 +100,11 @@ impl Ltr553 {
             return MIN_BRIGHTNESS;
         }
 
-        // Logarithmic mapping
+        // 対数マッピング
         // log10(1) = 0, log10(10) = 1, log10(100) = 2, log10(10000) = 4
         let log_lux = (lux as f32).log10();
 
-        // Map log10 range [0, 4] to brightness [10, 100]
+        // log10 範囲 [0, 4] を明るさ [10, 100] にマッピング
         let normalized = (log_lux / 4.0).clamp(0.0, 1.0);
         let brightness = MIN_BRIGHTNESS as f32 + normalized * (MAX_BRIGHTNESS - MIN_BRIGHTNESS) as f32;
 
@@ -132,6 +131,7 @@ mod tests {
 
     #[test]
     fn test_lux_to_brightness_dark() {
+        // 暗い環境のテスト
         assert_eq!(Ltr553::lux_to_brightness(0), 10);
         assert!(Ltr553::lux_to_brightness(1) >= 10);
         assert!(Ltr553::lux_to_brightness(10) <= 50);
@@ -139,12 +139,14 @@ mod tests {
 
     #[test]
     fn test_lux_to_brightness_bright() {
+        // 明るい環境のテスト
         assert!(Ltr553::lux_to_brightness(10000) >= 90);
         assert_eq!(Ltr553::lux_to_brightness(100000), 100);
     }
 
     #[test]
     fn test_lux_to_brightness_monotonic() {
+        // 単調増加のテスト
         let b1 = Ltr553::lux_to_brightness(10);
         let b2 = Ltr553::lux_to_brightness(100);
         let b3 = Ltr553::lux_to_brightness(1000);
