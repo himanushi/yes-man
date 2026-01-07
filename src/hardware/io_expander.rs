@@ -28,7 +28,26 @@ impl Aw9523 {
         Self::write_register(i2c, aw9523::reg::CONFIG0, 0x00)?;
         Self::write_register(i2c, aw9523::reg::CONFIG1, 0x00)?;
 
-        log::info!("AW9523 initialized");
+        // Set initial output state:
+        // P0: TOUCH_RST(0)=HIGH, BUS_OUT_EN(1)=HIGH
+        // P1: CAM_RST(0)=HIGH, LCD_RST(1)=HIGH
+        Self::write_register(i2c, aw9523::reg::OUTPUT0, 0x03)?; // P0.0, P0.1 HIGH
+        Self::write_register(i2c, aw9523::reg::OUTPUT1, 0x03)?; // P1.0, P1.1 HIGH
+
+        log::info!("AW9523 initialized (BUS_OUT_EN enabled)");
+        Ok(())
+    }
+
+    /// Enable peripheral bus output
+    pub fn enable_bus_output(i2c: &mut I2cDriver) -> Result<(), YesManError> {
+        log::info!("Enabling peripheral bus output (P0.1)...");
+        const BUS_OUT_EN: u8 = 1 << 1; // P0.1
+
+        let mut p0_state = Self::read_register(i2c, aw9523::reg::OUTPUT0).unwrap_or(0);
+        p0_state |= BUS_OUT_EN;
+        Self::write_register(i2c, aw9523::reg::OUTPUT0, p0_state)?;
+
+        log::info!("Peripheral bus enabled");
         Ok(())
     }
 
