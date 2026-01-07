@@ -67,16 +67,16 @@ impl Axp2101 {
         Ok(())
     }
 
-    /// Enable all peripheral power rails (BLDO1, BLDO2 for bus power)
+    /// 周辺機器の電源レール有効化 (BLDO1, BLDO2 バス電源用)
     pub fn enable_peripheral_power(i2c: &mut I2cDriver) -> Result<(), YesManError> {
-        log::info!("Enabling peripheral power rails (BLDO1, BLDO2)...");
+        log::info!("周辺機器電源レール (BLDO1, BLDO2) を有効化中...");
 
-        // BLDO1 enable bit = 0x10 (bit 4)
-        // BLDO2 enable bit = 0x20 (bit 5)
+        // BLDO1 有効ビット = 0x10 (bit 4)
+        // BLDO2 有効ビット = 0x20 (bit 5)
         let current = Self::read_register(i2c, axp2101::LDO_ONOFF)?;
-        Self::write_register(i2c, axp2101::LDO_ONOFF, current | 0x30)?; // Enable BLDO1 + BLDO2
+        Self::write_register(i2c, axp2101::LDO_ONOFF, current | 0x30)?; // BLDO1 + BLDO2 有効化
 
-        log::info!("BLDO1/BLDO2 enabled");
+        log::info!("BLDO1/BLDO2 有効化完了");
         Ok(())
     }
 
@@ -95,12 +95,26 @@ impl Axp2101 {
         Ok(())
     }
 
-    /// Convert brightness (0-100) to voltage register value
+    /// 明るさ (0-100) を電圧レジスタ値に変換
     fn brightness_to_voltage(brightness: u8) -> u8 {
-        // Map 0-100 to voltage range
-        // 0x00 = 500mV, 0x1C = 3300mV
+        // DLDO1 電圧: 500mV + 値 * 100mV
+        // 0x00 = 500mV, 0x1C = 3300mV (28段階)
+        //
+        // LED バックライトは点灯に最低 ~2.5V 必要
+        // 0x14 = 2500mV (最小可視)
+        // 0x1C = 3300mV (最大)
+        //
+        // 明るさ 0-100 を電圧範囲 0x14-0x1C (2.5V-3.3V) にマッピング
+        const MIN_REG: u8 = 0x14; // 2.5V - LED 点灯の最小値
+        const MAX_REG: u8 = 0x1C; // 3.3V - 最大輝度
+
+        if brightness == 0 {
+            return 0x00; // オフ
+        }
+
         let clamped = brightness.min(100) as u32;
-        ((clamped * 0x1C) / 100) as u8
+        let range = (MAX_REG - MIN_REG) as u32;
+        MIN_REG + ((clamped * range) / 100) as u8
     }
 }
 
@@ -110,10 +124,15 @@ mod tests {
 
     #[test]
     fn test_brightness_to_voltage() {
+        // 0% = オフ
         assert_eq!(Axp2101::brightness_to_voltage(0), 0x00);
+        // 100% = 最大 (3.3V)
         assert_eq!(Axp2101::brightness_to_voltage(100), 0x1C);
-        assert_eq!(Axp2101::brightness_to_voltage(50), 0x0E);
-        // Test clamping
+        // 1% = 最小可視 (2.5V)
+        assert_eq!(Axp2101::brightness_to_voltage(1), 0x14);
+        // 50% = 0x14 と 0x1C の中間
+        assert_eq!(Axp2101::brightness_to_voltage(50), 0x18); // 0x14 + 4
+        // クランプのテスト
         assert_eq!(Axp2101::brightness_to_voltage(255), 0x1C);
     }
 }
