@@ -67,6 +67,19 @@ impl Axp2101 {
         Ok(())
     }
 
+    /// Enable all peripheral power rails (BLDO1, BLDO2 for bus power)
+    pub fn enable_peripheral_power(i2c: &mut I2cDriver) -> Result<(), YesManError> {
+        log::info!("Enabling peripheral power rails (BLDO1, BLDO2)...");
+
+        // BLDO1 enable bit = 0x10 (bit 4)
+        // BLDO2 enable bit = 0x20 (bit 5)
+        let current = Self::read_register(i2c, axp2101::LDO_ONOFF)?;
+        Self::write_register(i2c, axp2101::LDO_ONOFF, current | 0x30)?; // Enable BLDO1 + BLDO2
+
+        log::info!("BLDO1/BLDO2 enabled");
+        Ok(())
+    }
+
     /// Read a register
     fn read_register(i2c: &mut I2cDriver, reg: u8) -> Result<u8, YesManError> {
         let mut buf = [0u8; 1];
