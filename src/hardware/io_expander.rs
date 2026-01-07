@@ -53,24 +53,52 @@ impl Aw9523 {
         Ok(())
     }
 
-    /// Reset touch controller via IO expander pin
+    /// Reset touch controller via IO expander pin (P0.0)
     pub fn reset_touch(i2c: &mut I2cDriver) -> Result<(), YesManError> {
         log::info!("Resetting touch controller...");
+
+        // TOUCH_RST is P0.0
+        const TOUCH_RST: u8 = 1 << 0;
+
+        // Read current P0 state
+        let mut p0_state = Self::read_register(i2c, aw9523::reg::OUTPUT0).unwrap_or(0);
+
+        // TOUCH_RST LOW
+        p0_state &= !TOUCH_RST;
+        Self::write_register(i2c, aw9523::reg::OUTPUT0, p0_state)?;
+        FreeRtos::delay_ms(10);
+
+        // TOUCH_RST HIGH
+        p0_state |= TOUCH_RST;
+        Self::write_register(i2c, aw9523::reg::OUTPUT0, p0_state)?;
+        FreeRtos::delay_ms(50);
+
+        log::info!("Touch reset complete");
+        Ok(())
+    }
+
+    /// Reset camera via IO expander pin (P1.0)
+    /// Also needed for LTR-553 which shares the same ribbon cable
+    pub fn reset_camera(i2c: &mut I2cDriver) -> Result<(), YesManError> {
+        log::info!("Resetting camera (for LTR-553 access)...");
+
+        // CAM_RST is P1.0
+        const CAM_RST: u8 = 1 << 0;
 
         // Read current P1 state
         let mut p1_state = Self::read_register(i2c, aw9523::reg::OUTPUT1).unwrap_or(0);
 
-        // TOUCH_RST LOW
-        p1_state &= !aw9523::pins::TOUCH_RST;
+        // CAM_RST LOW
+        p1_state &= !CAM_RST;
         Self::write_register(i2c, aw9523::reg::OUTPUT1, p1_state)?;
         FreeRtos::delay_ms(10);
 
-        // TOUCH_RST HIGH
-        p1_state |= aw9523::pins::TOUCH_RST;
+        // CAM_RST HIGH
+        p1_state |= CAM_RST;
         Self::write_register(i2c, aw9523::reg::OUTPUT1, p1_state)?;
         FreeRtos::delay_ms(50);
 
-        log::info!("Touch reset complete");
+        log::info!("Camera reset complete");
         Ok(())
     }
 
