@@ -72,9 +72,9 @@ impl Board {
         log::info!("Initializing M5Stack Core S3 Board");
         log::info!("========================================");
 
-        // Step 1: Initialize I2C
+        // Step 1: Initialize I2C (400kHz like M5Unified)
         log::info!("Step 1: Initializing I2C bus...");
-        let i2c_config = I2cConfig::new().baudrate(100.kHz().into());
+        let i2c_config = I2cConfig::new().baudrate(400.kHz().into());
         let mut i2c = I2cDriver::new(
             peripherals.i2c0,
             peripherals.pins.gpio12,
@@ -96,15 +96,53 @@ impl Board {
         Aw9523::reset_lcd(&mut i2c)?;
         FreeRtos::delay_ms(100);
 
-        // Step 4: Enable ALDO3 power for camera/LTR553
-        log::info!("Step 4: Enabling ALDO3 power for camera/LTR553...");
+        // Step 4: Enable power for camera/LTR553
+        log::info!("Step 4: Enabling power for camera/LTR553...");
         Axp2101::enable_aldo3(&mut i2c)?;
-        FreeRtos::delay_ms(50);
+        Axp2101::enable_peripheral_power(&mut i2c)?;
+        FreeRtos::delay_ms(100); // Longer delay for power stabilization
 
         // Step 4a: Reset camera and touch (LTR-553 shares ribbon cable)
         log::info!("Step 4a: Resetting camera and touch...");
         Aw9523::reset_camera(&mut i2c)?;
         Aw9523::reset_touch(&mut i2c)?;
+        FreeRtos::delay_ms(100); // Wait for peripherals to stabilize
+
+        // Debug: Read AW9523 output registers to verify pin states
+        {
+            let mut buf = [0u8; 1];
+            if i2c.write_read(0x58, &[0x02], &mut buf, 100).is_ok() {
+                log::info!("AW9523 P0 output: 0x{:02X} (expect BUS_OUT_EN=bit1, TOUCH_RST=bit0)", buf[0]);
+            }
+            if i2c.write_read(0x58, &[0x03], &mut buf, 100).is_ok() {
+                log::info!("AW9523 P1 output: 0x{:02X} (expect CAM_RST=bit0, LCD_RST=bit1)", buf[0]);
+            }
+        }
+
+        // Debug: Read AXP2101 power status registers
+        {
+            let mut buf = [0u8; 1];
+            // LDO enable status
+            if i2c.write_read(0x34, &[0x90], &mut buf, 100).is_ok() {
+                log::info!("AXP2101 LDO_ONOFF (0x90): 0x{:02X}", buf[0]);
+                log::info!("  DLDO1(bit7)={} DLDO2(bit6)={} BLDO2(bit5)={} BLDO1(bit4)={}",
+                    (buf[0] >> 7) & 1, (buf[0] >> 6) & 1, (buf[0] >> 5) & 1, (buf[0] >> 4) & 1);
+                log::info!("  ALDO4(bit3)={} ALDO3(bit2)={} ALDO2(bit1)={} ALDO1(bit0)={}",
+                    (buf[0] >> 3) & 1, (buf[0] >> 2) & 1, (buf[0] >> 1) & 1, buf[0] & 1);
+            }
+            // DCDC enable status
+            if i2c.write_read(0x34, &[0x80], &mut buf, 100).is_ok() {
+                log::info!("AXP2101 DCDC_ONOFF (0x80): 0x{:02X}", buf[0]);
+            }
+            // Read all LDO voltages
+            for (name, reg) in [("ALDO1", 0x92u8), ("ALDO2", 0x93), ("ALDO3", 0x94), ("ALDO4", 0x95),
+                                ("BLDO1", 0x96), ("BLDO2", 0x97), ("DLDO1", 0x99), ("DLDO2", 0x9A)] {
+                if i2c.write_read(0x34, &[reg], &mut buf, 100).is_ok() {
+                    let mv = 500 + (buf[0] as u32) * 100;
+                    log::info!("  {} (0x{:02X}): 0x{:02X} = {}mV", name, reg, buf[0], mv);
+                }
+            }
+        }
 
         // Step 4b: Scan I2C bus to find devices (using write probe)
         log::info!("========================================");
@@ -132,6 +170,17 @@ impl Board {
         }
         log::info!("Total: {} devices found", found_count);
         log::info!("========================================");
+
+        // Wait longer and re-scan to catch slow devices
+        FreeRtos::delay_ms(200);
+        log::info!("Second I2C scan after delay:");
+        for addr in [0x10u8, 0x21, 0x23, 0x36] {
+            if i2c.write(addr, &[], 10).is_ok() {
+                log::info!("  Found: 0x{:02X}", addr);
+            } else {
+                log::info!("  Missing: 0x{:02X}", addr);
+            }
+        }
 
         // Step 4c: Initialize ambient light sensor
         log::info!("Step 4c: Initializing ambient light sensor...");
