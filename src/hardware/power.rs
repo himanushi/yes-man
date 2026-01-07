@@ -52,6 +52,21 @@ impl Axp2101 {
         Ok(())
     }
 
+    /// Enable ALDO3 (3.3V for camera/LTR553)
+    pub fn enable_aldo3(i2c: &mut I2cDriver) -> Result<(), YesManError> {
+        log::info!("Enabling ALDO3 (camera/LTR553 power)...");
+
+        // Set ALDO3 voltage to 3.3V
+        Self::write_register(i2c, axp2101::ALDO3_VOLTAGE, axp2101::voltage::V3_3)?;
+
+        // Enable ALDO3
+        let current = Self::read_register(i2c, axp2101::LDO_ONOFF)?;
+        Self::write_register(i2c, axp2101::LDO_ONOFF, current | axp2101::ALDO3_ENABLE_BIT)?;
+
+        log::info!("ALDO3 enabled (3.3V)");
+        Ok(())
+    }
+
     /// Read a register
     fn read_register(i2c: &mut I2cDriver, reg: u8) -> Result<u8, YesManError> {
         let mut buf = [0u8; 1];
