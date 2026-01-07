@@ -65,6 +65,9 @@ impl Board {
     ///
     /// Returns a `BoardRuntime` that provides runtime access to hardware.
     pub fn init(peripherals: Peripherals) -> Result<BoardRuntime<'static>, YesManError> {
+        // Wait for serial monitor to connect
+        FreeRtos::delay_ms(500);
+
         log::info!("========================================");
         log::info!("Initializing M5Stack Core S3 Board");
         log::info!("========================================");
@@ -93,12 +96,45 @@ impl Board {
         Aw9523::reset_lcd(&mut i2c)?;
         FreeRtos::delay_ms(100);
 
-        // Step 4: Scan I2C bus to find devices
-        log::info!("Step 4: Scanning I2C bus...");
-        scan_i2c(&mut i2c);
+        // Step 4: Enable ALDO3 power for camera/LTR553
+        log::info!("Step 4: Enabling ALDO3 power for camera/LTR553...");
+        Axp2101::enable_aldo3(&mut i2c)?;
+        FreeRtos::delay_ms(50);
 
-        // Step 4b: Initialize ambient light sensor
-        log::info!("Step 4b: Initializing ambient light sensor...");
+        // Step 4a: Reset camera and touch (LTR-553 shares ribbon cable)
+        log::info!("Step 4a: Resetting camera and touch...");
+        Aw9523::reset_camera(&mut i2c)?;
+        Aw9523::reset_touch(&mut i2c)?;
+
+        // Step 4b: Scan I2C bus to find devices (using write probe)
+        log::info!("========================================");
+        log::info!("I2C Bus Scan Results:");
+        let mut found_count = 0;
+        for addr in 0x08u8..0x78 {
+            // Try write with empty data (address probe)
+            if i2c.write(addr, &[], 10).is_ok() {
+                found_count += 1;
+                let name = match addr {
+                    0x10 => "BMM150 (magnetometer)",
+                    0x21 => "GC0308 (camera)",
+                    0x23 => "LTR-553 (ambient light)",
+                    0x34 => "AXP2101 (power)",
+                    0x36 => "AW88298 (audio amp)",
+                    0x38 => "FT6336U (touch)",
+                    0x40 => "ES7210 (audio ADC)",
+                    0x51 => "BM8563 (RTC)",
+                    0x58 => "AW9523B (IO expander)",
+                    0x68 | 0x69 => "BMI270 (IMU)",
+                    _ => "unknown",
+                };
+                log::info!("  0x{:02X} - {}", addr, name);
+            }
+        }
+        log::info!("Total: {} devices found", found_count);
+        log::info!("========================================");
+
+        // Step 4c: Initialize ambient light sensor
+        log::info!("Step 4c: Initializing ambient light sensor...");
         match Ltr553::init(&mut i2c) {
             Ok(_) => log::info!("Ambient light sensor initialized"),
             Err(e) => log::warn!("Ambient light sensor init failed (non-fatal): {}", e),
