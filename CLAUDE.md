@@ -2,6 +2,12 @@
 
 Fallout: New Vegas の Yes Man を M5Stack Core S3 上に実装するプロジェクト。
 
+## 参照ドキュメント
+
+@documents/m5stack-core-s3-specs.md
+@documents/i2c-register-reference.md
+@documents/initialization-sequence.md
+
 ## プロジェクト概要
 
 - **ターゲットデバイス**: M5Stack Core S3 (ESP32-S3)
