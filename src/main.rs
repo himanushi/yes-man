@@ -31,6 +31,9 @@ fn main() -> anyhow::Result<()> {
     let mut backlight_ctrl = BacklightController::new();
 
     // Main loop with cooperative scheduling
+    log::info!("Starting main loop (backlight interval: {}ms, tick: {}ms)",
+        scheduler.backlight.interval_ms(), scheduler.tick_interval_ms());
+
     loop {
         // Task: Ambient light-based backlight adjustment
         if scheduler.backlight.should_run() {
@@ -38,7 +41,8 @@ fn main() -> anyhow::Result<()> {
                 Ok(lux) => {
                     let target = Ltr553::lux_to_brightness(lux);
                     backlight_ctrl.set_target(target);
-                    log::debug!("Ambient light: {} lux -> target brightness: {}%", lux, target);
+                    log::info!("Ambient: {} lux -> target: {}%, current: {}%",
+                        lux, target, backlight_ctrl.current());
                 }
                 Err(e) => {
                     log::warn!("Failed to read ambient light: {}", e);
@@ -50,7 +54,7 @@ fn main() -> anyhow::Result<()> {
                 if let Err(e) = board.set_backlight(new_brightness) {
                     log::warn!("Failed to set backlight: {}", e);
                 } else {
-                    log::debug!("Backlight set to {}%", new_brightness);
+                    log::info!("Backlight updated to {}%", new_brightness);
                 }
             }
         }
