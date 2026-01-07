@@ -20,12 +20,37 @@ use mipidsi::{options::*, Builder, models::ILI9342CRgb565};
 
 use crate::config::{pins, display as display_config};
 use crate::error::YesManError;
-use crate::hardware::{Axp2101, Aw9523};
+use crate::hardware::{Axp2101, Aw9523, Ltr553};
 
 /// M5Stack Core S3 Board (Facade)
 ///
 /// Provides unified access to all board hardware.
 pub struct Board;
+
+/// Runtime context for board hardware access
+///
+/// This struct holds the I2C driver and provides methods
+/// for runtime hardware operations (e.g., sensor reading, backlight control).
+pub struct BoardRuntime<'d> {
+    i2c: I2cDriver<'d>,
+}
+
+impl<'d> BoardRuntime<'d> {
+    /// Read ambient light level in lux
+    pub fn read_ambient_light(&mut self) -> Result<u32, YesManError> {
+        Ltr553::read_lux(&mut self.i2c)
+    }
+
+    /// Set backlight brightness (0-100)
+    pub fn set_backlight(&mut self, level: u8) -> Result<(), YesManError> {
+        Axp2101::set_brightness(&mut self.i2c, level)
+    }
+
+    /// Get mutable reference to I2C driver for direct access
+    pub fn i2c(&mut self) -> &mut I2cDriver<'d> {
+        &mut self.i2c
+    }
+}
 
 impl Board {
     /// Initialize all board hardware and display Hello World
@@ -35,8 +60,11 @@ impl Board {
     /// 1. I2C bus
     /// 2. Power management (backlight)
     /// 3. I/O expander (LCD reset)
-    /// 4. SPI display
-    pub fn init(peripherals: Peripherals) -> Result<(), YesManError> {
+    /// 4. Ambient light sensor
+    /// 5. SPI display
+    ///
+    /// Returns a `BoardRuntime` that provides runtime access to hardware.
+    pub fn init(peripherals: Peripherals) -> Result<BoardRuntime<'static>, YesManError> {
         log::info!("========================================");
         log::info!("Initializing M5Stack Core S3 Board");
         log::info!("========================================");
@@ -65,8 +93,16 @@ impl Board {
         Aw9523::reset_lcd(&mut i2c)?;
         FreeRtos::delay_ms(100);
 
-        // Step 4: Initialize SPI display
-        log::info!("Step 4: Initializing SPI display...");
+        // Step 4: Initialize ambient light sensor
+        log::info!("Step 4: Initializing ambient light sensor...");
+        match Ltr553::init(&mut i2c) {
+            Ok(_) => log::info!("Ambient light sensor initialized"),
+            Err(e) => log::warn!("Ambient light sensor init failed (non-fatal): {}", e),
+        }
+        FreeRtos::delay_ms(50);
+
+        // Step 5: Initialize SPI display
+        log::info!("Step 5: Initializing SPI display...");
         let spi_config = SpiConfig::new().baudrate(display_config::spi::FREQ_HZ_SAFE.Hz().into());
         let spi = SpiDeviceDriver::new_single(
             peripherals.spi2,
@@ -118,7 +154,7 @@ impl Board {
         // Keep display alive (don't drop it)
         core::mem::forget(display);
 
-        Ok(())
+        Ok(BoardRuntime { i2c })
     }
 }
 
