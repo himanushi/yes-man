@@ -13,8 +13,9 @@ M5Stack Core S3 のハードウェア初期化は特定の順序で行う必要�
    - バックライト有効化
        ↓
 3. AW9523B (I/O エキスパンダ)
-   - LCD リセット
-   - タッチ リセット
+   - LCD リセット (P1.1)
+   - タッチリセット (P0.0)
+   - カメラリセット (P1.0) ※カメラ使用時
        ↓
 4. SPI バス初期化
        ↓
@@ -22,7 +23,9 @@ M5Stack Core S3 のハードウェア初期化は特定の順序で行う必要�
        ↓
 6. FT6336U (タッチ) ※必要に応じて
        ↓
-7. その他デバイス (IMU, RTC, etc.)
+7. GC0308 (カメラ) ※必要に応じて
+       ↓
+8. その他デバイス (IMU, RTC, センサー等)
 ```
 
 ## 詳細シーケンス
@@ -88,12 +91,27 @@ write_register(0x58, 0x03, p1 & !0x02)?;  // LOW
 delay(50ms);
 write_register(0x58, 0x03, p1 | 0x02)?;   // HIGH
 delay(150ms);
+
+// タッチリセット (P0.0)
+let p0 = read_register(0x58, 0x02)?;
+write_register(0x58, 0x02, p0 & !0x01)?;  // LOW
+delay(10ms);
+write_register(0x58, 0x02, p0 | 0x01)?;   // HIGH
+delay(50ms);
+
+// カメラリセット (P1.0) ※カメラ使用時
+let p1 = read_register(0x58, 0x03)?;
+write_register(0x58, 0x03, p1 & !0x01)?;  // LOW
+delay(10ms);
+write_register(0x58, 0x03, p1 | 0x01)?;   // HIGH
+delay(50ms);
 ```
 
 **重要:**
 - LCD リセットは必須
 - LOW → HIGH のパルスが必要
 - 十分なディレイを入れる
+- カメラリセットはカメラ使用時のみ必要
 
 ### Step 4: SPI 初期化
 
@@ -130,6 +148,31 @@ let mut display = Builder::new(ILI9342CRgb565, di)
 - 回転は Deg180 が正位置
 - カラーオーダーは BGR
 
+### Step 6: GC0308 カメラ初期化 (オプション)
+
+M5CoreS3 ライブラリ使用時:
+```cpp
+#include "M5CoreS3.h"
+#include "esp_camera.h"
+
+auto cfg = M5.config();
+CoreS3.begin(cfg);
+
+if (!CoreS3.Camera.begin()) {
+    // カメラ初期化失敗
+    return;
+}
+
+// フレームサイズ設定
+CoreS3.Camera.sensor->set_framesize(
+    CoreS3.Camera.sensor, FRAMESIZE_QVGA);
+```
+
+**注意:**
+- カメラは SCCB (I2C 互換) で 0x21 に応答
+- AW9523B の P1.0 でリセット制御
+- チップ ID: 0x9B (GC0308_PID)
+
 ## タイミング図
 
 ```
@@ -164,9 +207,16 @@ Ready!
 3. カラーオーダー (BGR) 確認
 
 ### タッチが反応しない
-1. AW9523B で TOUCH_RST (P1.2) をリセット
+1. AW9523B で TOUCH_RST (P0.0) をリセット
 2. FT6336U の I2C アドレス (0x38) 確認
 3. タッチ閾値の調整
+4. タッチ IRQ ピン (GPIO21) の確認
+
+### カメラが動作しない
+1. AW9523B で CAM_RST (P1.0) をリセット
+2. GC0308 の I2C アドレス (0x21) 確認
+3. チップ ID (0x9B) の確認
+4. PSRAM が有効か確認 (カメラバッファに必要)
 
 ### I2C デバイスが見つからない
 ```rust
@@ -181,6 +231,8 @@ for addr in 0x08..0x78 {
 
 期待されるデバイス:
 - 0x10 (BMM150)
+- 0x21 (GC0308) ※カメラ
+- 0x23 (LTR-553ALS-WA) ※環境光/近接センサー
 - 0x34 (AXP2101)
 - 0x36 (AW88298)
 - 0x38 (FT6336U)
