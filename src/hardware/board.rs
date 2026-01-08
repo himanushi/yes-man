@@ -4,10 +4,10 @@
 //! and accessing all M5Stack Core S3 hardware components.
 
 use esp_idf_hal::delay::FreeRtos;
-use esp_idf_hal::gpio::PinDriver;
+use esp_idf_hal::gpio::{Gpio35, Output, PinDriver};
 use esp_idf_hal::i2c::{I2cConfig, I2cDriver};
 use esp_idf_hal::prelude::*;
-use esp_idf_hal::spi::{config::Config as SpiConfig, SpiDeviceDriver, SpiDriverConfig};
+use esp_idf_hal::spi::{config::Config as SpiConfig, SpiDeviceDriver, SpiDriver, SpiDriverConfig};
 
 use display_interface_spi::SPIInterface;
 use embedded_graphics::{
@@ -16,11 +16,21 @@ use embedded_graphics::{
     prelude::*,
     text::{Alignment, Text},
 };
-use mipidsi::{options::*, Builder, models::ILI9342CRgb565};
+use mipidsi::{options::*, Builder, Display, NoResetPin, models::ILI9342CRgb565};
 
 use crate::config::{pins, display as display_config};
 use crate::error::YesManError;
+use crate::graphics::FrameBuffer;
 use crate::hardware::{Axp2101, Aw9523, Ltr553};
+
+/// ディスプレイインターフェースの型エイリアス
+type DisplayInterface = SPIInterface<
+    SpiDeviceDriver<'static, SpiDriver<'static>>,
+    PinDriver<'static, Gpio35, Output>,
+>;
+
+/// ディスプレイの型エイリアス (リセットピンなし)
+pub type BoardDisplay = Display<DisplayInterface, ILI9342CRgb565, NoResetPin>;
 
 /// M5Stack Core S3 Board (Facade)
 ///
@@ -29,10 +39,12 @@ pub struct Board;
 
 /// Runtime context for board hardware access
 ///
-/// This struct holds the I2C driver and provides methods
-/// for runtime hardware operations (e.g., sensor reading, backlight control).
+/// This struct holds the I2C driver, display, and framebuffer.
+/// Provides methods for runtime hardware operations.
 pub struct BoardRuntime<'d> {
     i2c: I2cDriver<'d>,
+    display: BoardDisplay,
+    framebuffer: FrameBuffer,
 }
 
 impl<'d> BoardRuntime<'d> {
@@ -49,6 +61,29 @@ impl<'d> BoardRuntime<'d> {
     /// Get mutable reference to I2C driver for direct access
     pub fn i2c(&mut self) -> &mut I2cDriver<'d> {
         &mut self.i2c
+    }
+
+    /// フレームバッファへの可変参照を取得
+    ///
+    /// embedded-graphics の描画プリミティブを使って描画できる。
+    /// 描画後は flush() を呼んで画面に反映する。
+    pub fn framebuffer(&mut self) -> &mut FrameBuffer {
+        &mut self.framebuffer
+    }
+
+    /// フレームバッファの内容をディスプレイに転送
+    ///
+    /// フレームバッファに描画した内容を一括で画面に反映する。
+    /// これによりちらつきのない滑らかな画面更新が可能。
+    pub fn flush(&mut self) -> Result<(), YesManError> {
+        self.framebuffer
+            .flush(&mut self.display)
+            .map_err(|e| YesManError::Display(format!("Flush error: {:?}", e)))
+    }
+
+    /// フレームバッファをクリアして指定色で塗りつぶす
+    pub fn clear(&mut self, color: Rgb565) {
+        self.framebuffer.clear_with(color);
     }
 }
 
@@ -221,10 +256,13 @@ impl Board {
 
         log::info!("Display initialized ({}x{})", display_config::WIDTH, display_config::HEIGHT);
 
-        // Draw Hello World
-        log::info!("Drawing Hello World...");
-        display.clear(Rgb565::new(5, 20, 5)) // Dark green Yes Man background
-            .map_err(|e| YesManError::Display(format!("Clear error: {:?}", e)))?;
+        // フレームバッファを作成
+        log::info!("Creating framebuffer...");
+        let mut framebuffer = FrameBuffer::new();
+
+        // フレームバッファに Hello World を描画
+        log::info!("Drawing Hello World to framebuffer...");
+        framebuffer.clear_with(Rgb565::new(5, 20, 5)); // Dark green Yes Man background
 
         let style = MonoTextStyle::new(&FONT_10X20, Rgb565::WHITE);
         Text::with_alignment(
@@ -233,17 +271,24 @@ impl Board {
             style,
             Alignment::Center,
         )
-        .draw(&mut display)
+        .draw(&mut framebuffer)
         .map_err(|e| YesManError::Display(format!("Draw error: {:?}", e)))?;
+
+        // フレームバッファをディスプレイに転送
+        log::info!("Flushing framebuffer to display...");
+        framebuffer
+            .flush(&mut display)
+            .map_err(|e| YesManError::Display(format!("Flush error: {:?}", e)))?;
 
         log::info!("========================================");
         log::info!("Board initialization complete!");
         log::info!("========================================");
 
-        // Keep display alive (don't drop it)
-        core::mem::forget(display);
-
-        Ok(BoardRuntime { i2c })
+        Ok(BoardRuntime {
+            i2c,
+            display,
+            framebuffer,
+        })
     }
 }
 
