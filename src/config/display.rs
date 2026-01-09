@@ -17,7 +17,8 @@ pub mod spi {
     pub const FREQ_HZ_SAFE: u32 = 20_000_000; // 20 MHz
 }
 
-/// ILI9342C display controller settings
+/// ILI9342C display controller settings (ESP32 only)
+#[cfg(target_arch = "xtensa")]
 pub mod ili9342c {
     use mipidsi::options::{ColorOrder, Orientation, Rotation};
 
