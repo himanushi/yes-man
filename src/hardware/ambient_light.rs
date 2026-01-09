@@ -147,8 +147,8 @@ mod tests {
     #[test]
     fn test_lux_to_brightness_dark() {
         // 暗い環境のテスト
-        assert_eq!(Ltr553::lux_to_brightness(0), 10);
-        assert!(Ltr553::lux_to_brightness(1) >= 10);
+        assert_eq!(Ltr553::lux_to_brightness(0), 15);  // MIN_BRIGHTNESS
+        assert!(Ltr553::lux_to_brightness(1) >= 15);
         assert!(Ltr553::lux_to_brightness(10) <= 50);
     }
 
