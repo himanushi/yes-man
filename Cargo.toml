@@ -12,16 +12,23 @@ debug = true
 opt-level = "z"
 
 [dependencies]
-esp-idf-svc = { version = "0.50", features = ["critical-section", "embassy-time-driver"] }
-esp-idf-hal = "0.45"
 log = "0.4"
 anyhow = "1.0"
 
-# Display
+# Display (platform independent)
 embedded-graphics = "0.8"
+
+# ESP32 specific dependencies
+[target.'cfg(target_arch = "xtensa")'.dependencies]
+esp-idf-svc = { version = "0.50", features = ["critical-section", "embassy-time-driver"] }
+esp-idf-hal = "0.45"
 display-interface = "0.5"
 display-interface-spi = "0.5"
 mipidsi = "0.8"
 
 [build-dependencies]
-embuild = "0.33"
+embuild = { version = "0.33", optional = true }
+
+[features]
+default = ["esp-build"]
+esp-build = ["embuild"]
