@@ -29,13 +29,22 @@ impl Ltr553 {
 
         // ALS をアクティブモードで 1x ゲインで有効化 (広範囲: 1 ~ 64k lux)
         log::info!("  ALS アクティブモードを有効化中...");
-        Self::write_register(i2c, ltr553::reg::ALS_CONTR, ltr553::als_ctrl::GAIN_1X | ltr553::als_ctrl::ACTIVE)?;
+        let als_ctrl_value = ltr553::als_ctrl::GAIN_1X | ltr553::als_ctrl::ACTIVE;
+        Self::write_register(i2c, ltr553::reg::ALS_CONTR, als_ctrl_value)?;
 
         // 測定レート設定: 100ms 積分時間、500ms 繰り返しレート
         Self::write_register(i2c, ltr553::reg::ALS_MEAS_RATE, 0x03)?;
 
         // 最初の測定を待つ
         FreeRtos::delay_ms(100);
+
+        // 設定が正しく書き込まれたか確認
+        let als_contr_readback = Self::read_register(i2c, ltr553::reg::ALS_CONTR)?;
+        log::info!("  ALS_CONTR: wrote 0x{:02X}, read back 0x{:02X}", als_ctrl_value, als_contr_readback);
+
+        // ステータスレジスタを確認
+        let status = Self::read_register(i2c, ltr553::reg::ALS_PS_STATUS)?;
+        log::info!("  ALS_PS_STATUS: 0x{:02X} (bit2=ALS_DATA_STATUS)", status);
 
         log::info!("LTR-553 初期化成功");
         Ok(())
@@ -59,6 +68,9 @@ impl Ltr553 {
     /// バックライト制御に適した簡易計算を使用
     pub fn read_lux(i2c: &mut I2cDriver) -> Result<u32, YesManError> {
         let (ch0, ch1) = Self::read_als_raw(i2c)?;
+
+        // デバッグ: 生データをログ出力
+        log::info!("LTR-553 raw: ch0={}, ch1={}", ch0, ch1);
 
         // 簡易 lux 計算
         // 正確な lux にはゲイン、積分時間、比率を考慮する必要がある
