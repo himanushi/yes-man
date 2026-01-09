@@ -73,8 +73,8 @@ impl Ltr553 {
         log::info!("LTR-553 raw: ch0={}, ch1={}", ch0, ch1);
 
         // 簡易 lux 計算
-        // 正確な lux にはゲイン、積分時間、比率を考慮する必要がある
-        // この近似値はバックライト制御には十分
+        // LTR-553 のデータシートに基づく計算式
+        // ratio = CH1 / CH0 で光源の種類を判定
         let lux = if ch0 == 0 {
             0
         } else {
@@ -86,9 +86,12 @@ impl Ltr553 {
             } else if ratio < 0.85 {
                 0.5926 * (ch0 as f32) + 0.1185 * (ch1 as f32)
             } else {
-                0.0
+                // ratio >= 0.85: 主に IR 光源（白熱灯など）
+                // 簡易的に ch0 ベースで計算
+                0.1 * (ch0 as f32)
             };
-            lux_f as u32
+            // 最低でも ch0 が 0 でなければ 1 lux を返す
+            (lux_f as u32).max(1)
         };
 
         Ok(lux)
