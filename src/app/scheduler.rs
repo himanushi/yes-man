@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_periodic_task_initial_run() {
-        let mut task = PeriodicTask::new(100);
+        let _task = PeriodicTask::new(100);
         // First call should always run (last_run is 0)
         // Note: This test won't work correctly without mocking time
         // In real usage, the first check after boot will run
