@@ -29,9 +29,15 @@
 
 pub mod config;
 pub mod error;
-pub mod hardware;
 pub mod graphics;
+
+// ESP32 専用モジュール
+#[cfg(target_arch = "xtensa")]
+pub mod hardware;
+#[cfg(target_arch = "xtensa")]
 pub mod app;
 
 pub use error::{YesManError, Result};
+
+#[cfg(target_arch = "xtensa")]
 pub use app::YesManApp;
