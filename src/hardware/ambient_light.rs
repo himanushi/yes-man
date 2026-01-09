@@ -108,7 +108,7 @@ impl Ltr553 {
         // 1000-10000 lux: 70-90% (明るい室内 / 日陰)
         // 10000+ lux: 90-100% (直射日光)
 
-        const MIN_BRIGHTNESS: u8 = 10;
+        const MIN_BRIGHTNESS: u8 = 15;
         const MAX_BRIGHTNESS: u8 = 100;
 
         if lux == 0 {
